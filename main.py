@@ -7,10 +7,18 @@ from selenium.webdriver.support import expected_conditions as EC
 # ===============================
 # CREDENCIAIS FIXAS
 # ===============================
-email = "caicrochask8@gmail.com"  # Substitua pelo seu email
+email = "caicrs.contact@gmail.com"  # Substitua pelo seu email
 senha = "926759058#Leguas"         # Substitua pela sua senha
 
+# ===============================
+# CONFIGURAÇÃO DO NAVEGADOR
+# ===============================
+abrir_visivelmente = False  # Altere para False para rodar em modo headless
+
 options = uc.ChromeOptions()
+if not abrir_visivelmente:
+    options.add_argument('--headless')
+    options.add_argument('--disable-gpu')  # Necessário para algumas versões do Windows
 # options.add_argument("--disable-extensions")
 # options.add_argument("--no-sandbox")
 # options.add_argument("--start-maximized")
@@ -46,24 +54,97 @@ time.sleep(5)  # Ajuste se precisar de mais tempo
 # ===============================
 # ACESSA MEUS PROJETOS
 # ===============================
-driver.get("https://www.99freelas.com.br/projects")
+driver.get("https://www.99freelas.com.br/projects?order=mais-recentes&categoria=web-mobile-e-software")
 
 # ===============================
 # FUNÇÃO PARA BUSCAR PROJETOS
 # ===============================
 def buscar_projetos():
     try:
-        projetos = driver.find_elements(By.CLASS_NAME, "project-card")
-        print(f"Procurando projetos WEB... ({len(projetos)} encontrados)")
-        for p in projetos:
+        # Aguarda a lista de resultados carregar
+        wait = WebDriverWait(driver, 10)
+        lista_projetos = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "result-list")))
+        
+        # Encontra todos os itens de projeto
+        projetos = lista_projetos.find_elements(By.CLASS_NAME, "result-item")
+        print(f"\nEncontramos {len(projetos)} projetos novos!")
+        print("=" * 50)
+        
+        for projeto in projetos:
             try:
-                titulo = p.find_element(By.TAG_NAME, "h2").text
-                if "WEB" in titulo.upper():
-                    print("Projeto encontrado:", titulo)
-            except:
+                # Extrai informações básicas usando XPath relativo ao projeto atual
+                try:
+                    titulo_element = projeto.find_element(By.XPATH, ".//h1[contains(@class, 'title')]//a")
+                    titulo = titulo_element.text
+                    link = titulo_element.get_attribute("href")
+                except Exception as e:
+                    print(f"Erro ao extrair título/link: {str(e)}")
+                    titulo = "Título não disponível"
+                    link = "Link não disponível"
+
+                # Extrai informações adicionais
+                try:
+                    info = projeto.find_element(By.CLASS_NAME, "information").text
+                except Exception as e:
+                    print(f"Erro ao extrair informações: {str(e)}")
+                    info = "Informações não disponíveis"
+
+                # Extrai descrição
+                try:
+                    descricao_element = projeto.find_element(By.CLASS_NAME, "description")
+                    # Tenta expandir a descrição
+                    try:
+                        expandir_btn = descricao_element.find_element(By.CLASS_NAME, "more-link")
+                        driver.execute_script("arguments[0].click();", expandir_btn)
+                        time.sleep(1)  # Aumentei o tempo de espera
+                    except:
+                        pass  # Ignora se não houver botão expandir
+                    
+                    descricao = descricao_element.get_attribute('textContent').strip()
+                    descricao = descricao.replace("Expandir", "").replace("Esconder", "").replace("…", "").strip()
+                except Exception as e:
+                    print(f"Erro ao extrair descrição: {str(e)}")
+                    descricao = "Descrição não disponível"
+
+                # Extrai habilidades
+                try:
+                    habilidades = projeto.find_element(By.CLASS_NAME, "habilidades").text
+                except:
+                    habilidades = "Não especificadas"
+
+                # Extrai informações do cliente
+                try:
+                    cliente_element = projeto.find_element(By.CLASS_NAME, "client")
+                    cliente_nome = cliente_element.find_element(By.XPATH, ".//a").text
+                    cliente = cliente_nome if cliente_nome else "Cliente não identificado"
+                except:
+                    cliente = "Cliente não identificado"
+
+                # Extrai avaliação
+                try:
+                    avaliacao_element = projeto.find_element(By.CLASS_NAME, "avaliacoes-text").text
+                except:
+                    avaliacao_element = "Sem avaliações"
+
+                # Imprime as informações formatadas
+                print(f"\nTítulo: {titulo}")
+                print(f"Link: {link}")
+                print(f"Informações: {info}")
+                print(f"Cliente: {cliente} - {avaliacao_element}")
+                print(f"Habilidades: {habilidades}")
+                print("\nDescrição completa:")
+                print("-" * 20)
+                print(descricao)
+                print("-" * 50)
+
+            except Exception as e:
+                print(f"Erro ao processar um projeto específico: {str(e)}")
                 continue
+
     except Exception as e:
-        print("Erro ao buscar projetos:", e)
+        print(f"Erro ao buscar projetos: {str(e)}")
+        
+    print("\nAguardando 2 minutos para nova verificação...")
 
 # ===============================
 # LOOP PRINCIPAL (a cada 2 minutos)
@@ -71,7 +152,6 @@ def buscar_projetos():
 try:
     while True:
         buscar_projetos()
-        print("Aguardando 2 minutos para nova verificação...\n")
         time.sleep(120)
 except KeyboardInterrupt:
     print("Execução interrompida pelo usuário.")
