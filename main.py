@@ -1,24 +1,14 @@
 import time
-import tkinter as tk
-from tkinter import simpledialog
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 # ===============================
-# PAINEL GRÁFICO PARA LOGIN
+# CREDENCIAIS FIXAS
 # ===============================
-root = tk.Tk()
-root.withdraw()  # Esconde a janela principal
-
-# Usuário digita e-mail e senha
-email = simpledialog.askstring("Login 99Freelas", "Digite seu e-mail:")
-senha = simpledialog.askstring("Login 99Freelas", "Digite sua senha:", show="*")
-
-if not email or not senha:
-    print("E-mail ou senha não fornecidos. Encerrando.")
-    exit()
+email = "caicrochask8@gmail.com"  # Substitua pelo seu email
+senha = "926759058#Leguas"         # Substitua pela sua senha
 
 options = uc.ChromeOptions()
 # options.add_argument("--disable-extensions")
@@ -32,6 +22,11 @@ wait = WebDriverWait(driver, 15)
 
 # LOGIN NO SITE
 driver.get("https://www.99freelas.com.br/login")
+
+print("Aguardando 10 segundos antes de fazer login...")
+for i in range(10, 0, -1):
+    print(f"Aguardando... {i} segundos")
+    time.sleep(1)
 
 # Espera campos de email e senha carregarem
 email_input = wait.until(EC.presence_of_element_located((By.ID, "email")))
