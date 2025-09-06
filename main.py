@@ -5,32 +5,26 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import hashlib
 import re
-from database import get_redis_connection, get_mariadb_connection
+from database.database import get_redis_connection, save_project_to_mariadb
 
-# ===============================
-# CREDENCIAIS FIXAS
-# ===============================
-email = "caicrs.contact@gmail.com"  # Substitua pelo seu email
-senha = "926759058#Leguas"         # Substitua pela sua senha
+email = "caicrs.contact@gmail.com"
+senha = "926759058#Leguas"
 
 # ===============================
 # CONFIGURAÇÃO DO NAVEGADOR
 # ===============================
-abrir_visivelmente = False  # Altere para False para rodar em modo headless
+abrir_visivelmente = False
 
 options = uc.ChromeOptions()
 if not abrir_visivelmente:
     options.add_argument('--headless')
-    options.add_argument('--disable-gpu')  # Necessário para algumas versões do Windows
+    options.add_argument('--disable-gpu')
 
 driver = uc.Chrome(options=options)
-
-# Cria espera explícita
 wait = WebDriverWait(driver, 15)
 
-# Conexões com Redis e MariaDB
+# Conexão com Redis
 redis_client = get_redis_connection()
-db_conn = get_mariadb_connection()
 
 # ===============================
 # FUNÇÕES UTILITÁRIAS
@@ -47,43 +41,7 @@ def is_duplicate(project_id):
 
 def save_to_redis(project_id):
     """Salva o projeto no Redis para verificação futura"""
-    redis_client.setex(f"project:{project_id}", 86400 * 7, "processed")  # 7 dias
-
-def save_to_mariadb(project_data, fonte):
-    """Salva o projeto no MariaDB"""
-    try:
-        cursor = db_conn.cursor()
-        
-        sql = """
-        INSERT INTO freelas_projects 
-        (id, titulo, link, descricao, cliente, cliente_link, habilidades, 
-         propostas, tempo_restante, avaliacao, num_avaliacoes, fonte)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """
-        
-        valores = (
-            project_data['id'],
-            project_data['titulo'],
-            project_data['link'],
-            project_data['descricao'],
-            project_data['cliente'],
-            project_data['cliente_link'],
-            project_data['habilidades'],
-            project_data['propostas'],
-            project_data['tempo_restante'],
-            project_data['avaliacao'],
-            project_data['num_avaliacoes'],
-            fonte
-        )
-        
-        cursor.execute(sql, valores)
-        db_conn.commit()
-        cursor.close()
-        return True
-    except Exception as e:
-        print(f"Erro ao salvar no MariaDB: {e}")
-        db_conn.rollback()
-        return False
+    redis_client.setex(f"project:{project_id}", 86400 * 7, "processed")
 
 def extrair_descricao(projeto):
     """Extrai a descrição do projeto"""
@@ -154,11 +112,19 @@ def extrair_num_avaliacoes(projeto):
     try:
         cliente_element = projeto.find_element(By.CLASS_NAME, "client")
         avaliacao_text = cliente_element.find_element(By.CLASS_NAME, "avaliacoes-text").text
-        # Extrai números do texto de avaliação
         numeros = re.findall(r'\d+', avaliacao_text)
         return int(numeros[0]) if numeros else 0
     except:
         return 0
+
+def extrair_budget(info_text):
+    """Extrai o budget do projeto"""
+    try:
+        if "Budget:" in info_text:
+            return info_text.split("Budget:")[1].strip()
+        return "Não informado"
+    except:
+        return "Não informado"
 
 def processar_projeto(projeto):
     """Processa um projeto individual do 99freelas"""
@@ -190,7 +156,10 @@ def processar_projeto(projeto):
             'propostas': extrair_propostas(info_block),
             'tempo_restante': extrair_tempo_restante(projeto),
             'avaliacao': extrair_avaliacao(projeto),
-            'num_avaliacoes': extrair_num_avaliacoes(projeto)
+            'num_avaliacoes': extrair_num_avaliacoes(projeto),
+            'budget': extrair_budget(info_block),
+            'publicado': None,
+            'tipo': None
         }
         
         return projeto_data
@@ -222,7 +191,7 @@ def buscar_projetos():
             
             if projeto_data:
                 # Salva no banco de dados
-                if save_to_mariadb(projeto_data, "99freelas"):
+                if save_project_to_mariadb(projeto_data, "99freelas"):
                     # Marca como processado no Redis
                     save_to_redis(projeto_data['id'])
                     novos_projetos += 1
@@ -237,7 +206,7 @@ def buscar_projetos():
                     print(f"   Link: {projeto_data['link']}")
                     print("-" * 40)
             
-            # Pequena pausa entre projetos para não sobrecarregar
+            # Pequena pausa entre projetos
             time.sleep(0.5)
         
         print(f"\n📊 RESUMO:")
@@ -322,13 +291,6 @@ def main():
     except Exception as e:
         print(f"❌ Erro inesperado: {e}")
     finally:
-        # Encerra conexões e driver
-        try:
-            db_conn.close()
-            print("✅ Conexão com MariaDB fechada.")
-        except:
-            pass
-            
         try:
             driver.quit()
             print("✅ Driver do navegador encerrado.")
@@ -337,8 +299,5 @@ def main():
         
         print("👋 Script finalizado.")
 
-# ===============================
-# EXECUÇÃO
-# ===============================
 if __name__ == "__main__":
     main()
